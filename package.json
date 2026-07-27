@@ -1,0 +1,15 @@
+{
+  "name": "media-downloader-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted yt-dlp media downloader — Express API + SSE + lowdb.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.21.2",
+    "lowdb": "^1.0.0"
+  }
+}
