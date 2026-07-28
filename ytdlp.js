@@ -5,7 +5,7 @@ const path = require('path')
 const fs = require('fs')
 const settings = require('./settings')
 
-const YT_DLP = process.env.YTDLP_PATH || 'yt-dlp'
+const YT_DLP = process.env.YTDLP_PATH || (fs.existsSync(path.join(__dirname, 'yt-dlp')) ? path.join(__dirname, 'yt-dlp') : 'yt-dlp')
 
 // Output template, resolved live so a download-folder change in Settings takes
 // effect immediately. Title is truncated to 150 chars because some sites
@@ -244,7 +244,8 @@ function getVersion() {
 // yt-dlp (2025+) needs a JS runtime (Deno) for reliable YouTube extraction.
 // Returns the first line of `deno --version`, or null if not found.
 function getJsRuntime() {
-  return commandVersion('deno', ['--version']).then((v) => (v ? v.split('\n')[0].trim() : null))
+  const denoCmd = fs.existsSync(path.join(__dirname, 'deno')) ? path.join(__dirname, 'deno') : 'deno'
+  return commandVersion(denoCmd, ['--version']).then((v) => (v ? v.split('\n')[0].trim() : null))
 }
 
 function fmtDuration(seconds) {
