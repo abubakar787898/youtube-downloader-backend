@@ -1,15 +1,2 @@
-providers = ["node"]
-
 [phases.setup]
-nixPkgs = ["...", "ffmpeg", "curl", "unzip"]
-
-[phases.build]
-cmds = [
-    "...",
-    "curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o yt-dlp",
-    "chmod a+rx yt-dlp",
-    "curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip -o deno.zip",
-    "unzip deno.zip",
-    "chmod a+rx deno",
-    "rm deno.zip"
-]
+aptPkgs = ["...", "ffmpeg", "curl", "unzip"]
