@@ -101,6 +101,38 @@ function buildArgs(format, height) {
   return ['--no-playlist', ...cookieArgs(), '-f', selector, '--merge-output-format', 'mp4', ...progress]
 }
 
+function streamArgs(format, height) {
+  if (format === 'mp3') {
+    return [
+      '--no-playlist',
+      ...cookieArgs(),
+      '-x',
+      '--audio-format',
+      'mp3',
+      '--embed-thumbnail',
+      '--embed-metadata',
+      '-o',
+      '-',
+    ]
+  }
+
+  const h = Number.isInteger(height) && height > 0 ? height : null
+  let selector = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+  
+  if (h) {
+    if (h <= 720) {
+      // For <=720p, YouTube provides pre-merged single files. 
+      // Prefer them to stream instantly without yt-dlp buffering/merging!
+      selector = `best[height<=${h}][ext=mp4]/best[height<=${h}]/bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/best`
+    } else {
+      // For >720p, merging is usually required (YouTube separates video/audio for 1080p+).
+      selector = `bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[height<=${h}]/best`
+    }
+  }
+
+  return ['--no-playlist', ...cookieArgs(), '-f', selector, '--merge-output-format', 'mp4', '-o', '-']
+}
+
 // Strip directory, extension and any ".f137" yt-dlp format fragment to get a
 // human-friendly title from a destination/merge filename.
 function titleFromPath(p) {
@@ -219,6 +251,60 @@ function runDownload(job, onProgress) {
       reject(new Error(tail || `yt-dlp exited with code ${code}`))
     })
   })
+}
+
+/**
+ * Stream a download to an Express response by downloading to a temporary file first.
+ * This guarantees proper MP4 merging, avoids ffmpeg stdout errors, and allows setting Content-Length.
+ * Kills the yt-dlp process if the client disconnects.
+ */
+function streamDownload(job, req, res) {
+  return new Promise(async (resolve, reject) => {
+    let tempFile = null;
+    let aborted = false;
+
+    req.on('close', () => { aborted = true });
+
+    try {
+      // Always download to a temporary file first using the standard robust downloader.
+      const result = await runDownload(job, () => {});
+      tempFile = result.filepath;
+      
+      if (aborted) {
+        if (tempFile) fs.unlink(tempFile, () => {});
+        return resolve();
+      }
+
+      // Calculate exact filesize so Chrome can display a native progress bar and ETA!
+      const stat = fs.statSync(tempFile);
+      if (!res.headersSent) res.setHeader('Content-Length', stat.size);
+
+      const readStream = fs.createReadStream(tempFile);
+      
+      readStream.pipe(res);
+      
+      readStream.on('error', (err) => {
+        if (tempFile) fs.unlink(tempFile, () => {});
+        if (!res.headersSent) res.status(500).end();
+        reject(err);
+      });
+
+      readStream.on('end', () => {
+        if (tempFile) fs.unlink(tempFile, () => {});
+        resolve();
+      });
+      
+      req.on('close', () => {
+        readStream.destroy();
+        if (tempFile) fs.unlink(tempFile, () => {});
+      });
+
+    } catch (err) {
+      if (tempFile) fs.unlink(tempFile, () => {});
+      if (!res.headersSent) res.status(500).end();
+      reject(err);
+    }
+  });
 }
 
 function commandVersion(cmd, args) {
@@ -341,6 +427,7 @@ function getInfo(url) {
 
 module.exports = {
   runDownload,
+  streamDownload,
   getInfo,
   getVersion,
   getJsRuntime,
